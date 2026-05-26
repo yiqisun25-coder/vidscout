@@ -1,24 +1,35 @@
-// ── Platform ──────────────────────────────────────────────────────────────
-export type Platform = '抖音' | '小红书' | 'B站' | '视频号' | 'YouTube';
+// ── Shop Info ─────────────────────────────────────────────────────────────────
+export type ShopType = '餐饮' | '咖啡/饮品' | '快印/文印' | '美发/美甲' | '零售' | '健身/运动' | '其他';
+export type Platform = '抖音本地生活' | '小红书' | '大众点评' | '视频号' | '快手';
+
+export interface ShopInfo {
+  name: string;        // 店名
+  type: ShopType;
+  avgPrice: string;    // 人均，e.g. "¥68"
+  highlights: string;  // 特色/卖点
+  area?: string;       // 区域/商圈
+}
+
+// ── Workflow ──────────────────────────────────────────────────────────────────
 export type VideoStatus = 'idea' | 'scripting' | 'shooting' | 'editing' | 'published';
 export type WorkflowStep = 'topic' | 'schedule' | 'script' | 'shooting' | 'publish';
 
-// ── Topic Step ────────────────────────────────────────────────────────────
+// ── Topic ─────────────────────────────────────────────────────────────────────
 export interface TopicIdea {
   id: string;
-  title: string;
-  hook: string;          // 开场钩子 (≤3s)
-  angle: string;         // 差异化角度
-  audience: string;      // 目标人群
-  potential: string;     // 预估播放量
+  title: string;       // 视频标题
+  hook: string;        // 开场钩子 ≤3s
+  angle: string;       // 切入角度（测评/种草/探秘/性价比）
+  audience: string;    // 目标人群
+  potential: string;   // 预估播放量
 }
 
-// ── Script Step ───────────────────────────────────────────────────────────
+// ── Script ────────────────────────────────────────────────────────────────────
 export interface ScriptLine {
-  ts: string;            // timestamp, e.g. "0:00–0:05"
-  type: 'hook' | 'narration' | 'action' | 'broll' | 'cta';
-  copy: string;          // 口播文案
-  visual: string;        // 画面/动作说明
+  ts: string;
+  type: 'hook' | 'arrival' | 'environment' | 'product' | 'price' | 'verdict' | 'cta';
+  copy: string;        // 口播文案
+  visual: string;      // 画面/动作
 }
 
 export interface Script {
@@ -26,11 +37,11 @@ export interface Script {
   lines: ScriptLine[];
 }
 
-// ── Shooting Step ─────────────────────────────────────────────────────────
+// ── Shooting ──────────────────────────────────────────────────────────────────
 export interface Shot {
   order: number;
-  ref: string;           // script ref
-  angle: string;         // 机位
+  ref: string;
+  angle: string;
   duration: string;
   notes: string;
 }
@@ -42,7 +53,7 @@ export interface ShootingGuide {
   editing: string[];
 }
 
-// ── Publish Step ─────────────────────────────────────────────────────────
+// ── Publish ───────────────────────────────────────────────────────────────────
 export interface PublishKit {
   title: string;
   caption: string;
@@ -52,32 +63,24 @@ export interface PublishKit {
   tips: string[];
 }
 
-// ── Project (ties it all together) ────────────────────────────────────────
+// ── Project ───────────────────────────────────────────────────────────────────
 export interface Project {
   id: string;
   platform: Platform;
-  niche: string;           // 赛道
+  shopInfo: ShopInfo;
   status: VideoStatus;
   step: WorkflowStep;
 
-  // Step 1 outputs
-  topics?: TopicIdea[];
-  topic?: TopicIdea;       // chosen topic
-
-  // Step 2 outputs
   shootDate?: string;
   publishDate?: string;
   publishTime?: string;
 
-  // Step 3 outputs
+  topics?: TopicIdea[];
+  topic?: TopicIdea;
   script?: Script;
-
-  // Step 4 outputs
   shootingGuide?: ShootingGuide;
   checkedGear?: string[];
   checkedShots?: number[];
-
-  // Step 5 outputs
   publishKit?: PublishKit;
   published?: boolean;
 

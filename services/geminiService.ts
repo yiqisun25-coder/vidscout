@@ -1,71 +1,49 @@
 import { GoogleGenAI } from "@google/genai";
-import { Platform, TopicIdea, Script, ShootingGuide, PublishKit, ScriptLine } from "../types";
+import { Platform, ShopInfo, TopicIdea, Script, ScriptLine, ShootingGuide, PublishKit } from "../types";
 
-// ── Provider detection ────────────────────────────────────────────────────────
-// Priority: Custom → DeepSeek → OpenRouter → Gemini → mock
-const CUSTOM_BASE     = process.env.CUSTOM_API_BASE;
-const CUSTOM_KEY      = process.env.CUSTOM_API_KEY;
-const CUSTOM_MODEL    = process.env.CUSTOM_API_MODEL ?? 'moonshot-v1-8k';
-const DEEPSEEK_KEY    = process.env.DEEPSEEK_API_KEY;
-const OPENROUTER_KEY  = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_MODEL= process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
-const GEMINI_KEY      = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
+// ── Provider ──────────────────────────────────────────────────────────────────
+const CUSTOM_BASE  = process.env.CUSTOM_API_BASE;
+const CUSTOM_KEY   = process.env.CUSTOM_API_KEY;
+const CUSTOM_MODEL = process.env.CUSTOM_API_MODEL ?? 'Qwen/Qwen2.5-72B-Instruct';
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+const OR_KEY       = process.env.OPENROUTER_API_KEY;
+const OR_MODEL     = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
+const GEMINI_KEY   = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
 
 export type ProviderName = 'custom' | 'deepseek' | 'openrouter' | 'gemini' | 'mock';
 
 export function activeProvider(): ProviderName {
   if (CUSTOM_BASE && CUSTOM_KEY) return 'custom';
   if (DEEPSEEK_KEY)              return 'deepseek';
-  if (OPENROUTER_KEY)            return 'openrouter';
+  if (OR_KEY)                    return 'openrouter';
   if (GEMINI_KEY)                return 'gemini';
   return 'mock';
 }
 
-// 显示名称（用于 UI badge）
 export function providerLabel(): string {
   if (CUSTOM_BASE && CUSTOM_KEY) {
-    // 从 base URL 提取域名作为显示名，例如 api.moonshot.cn → Moonshot
     try {
-      const host = new URL(CUSTOM_BASE).hostname; // e.g. api.moonshot.cn
+      const host = new URL(CUSTOM_BASE).hostname;
       const parts = host.split('.');
       const name = parts.length >= 2 ? parts[parts.length - 2] : host;
-      return name.charAt(0).toUpperCase() + name.slice(1); // Moonshot
-    } catch {
-      return 'Custom';
-    }
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    } catch { return 'Custom'; }
   }
-  if (DEEPSEEK_KEY)   return 'DeepSeek';
-  if (OPENROUTER_KEY) return 'OpenRouter';
-  if (GEMINI_KEY)     return 'Gemini';
+  if (DEEPSEEK_KEY) return 'DeepSeek';
+  if (OR_KEY)       return 'OpenRouter';
+  if (GEMINI_KEY)   return 'Gemini';
   return '离线模式';
 }
 
-// ── 通用 OpenAI-compatible 调用 ───────────────────────────────────────────────
-async function askOpenAICompat(
-  baseUrl: string,
-  key: string,
-  model: string,
-  prompt: string,
-  extraHeaders: Record<string, string> = {},
-): Promise<string> {
-  const url = baseUrl.replace(/\/$/, '') + '/chat/completions';
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
+const SYS = '你是专业探店短视频策划。严格按要求返回纯 JSON，不含任何 markdown 或额外文字。';
+
+async function askOpenAICompat(base: string, key: string, model: string, prompt: string, extraHeaders: Record<string,string> = {}): Promise<string> {
+  const url = base.replace(/\/$/, '') + '/chat/completions';
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...extraHeaders,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: '你是专业短视频内容策划。严格按照要求的 JSON 格式返回，不要包含任何 markdown 或额外说明，只输出纯 JSON。',
-        },
-        { role: 'user', content: prompt },
-      ],
-    }),
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', ...extraHeaders },
+    body: JSON.stringify({ model, messages: [{ role: 'system', content: SYS }, { role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`${new URL(url).hostname} ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -74,271 +52,233 @@ async function askOpenAICompat(
   return extractJSON(content);
 }
 
-// 从可能含 markdown 的字符串中提取 JSON
-function extractJSON(text: string): string {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  const start = text.search(/[{[]/);
-  if (start !== -1) return text.slice(start);
-  return text;
-}
-
-// ── Gemini（原生 SDK）────────────────────────────────────────────────────────
 async function askGemini(prompt: string): Promise<string> {
   if (!GEMINI_KEY) throw new Error('NO_GEMINI_KEY');
   const ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
-  const r = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: { responseMimeType: 'application/json' },
-  });
+  const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
   if (!r.text) throw new Error('Gemini returned empty');
   return r.text;
 }
 
-// ── Unified ask() ─────────────────────────────────────────────────────────────
+function extractJSON(text: string): string {
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match) return match[1].trim();
+  const start = text.search(/[{[]/);
+  return start !== -1 ? text.slice(start) : text;
+}
+
 async function ask(prompt: string): Promise<string> {
-  if (CUSTOM_BASE && CUSTOM_KEY)
-    return askOpenAICompat(CUSTOM_BASE, CUSTOM_KEY, CUSTOM_MODEL, prompt);
-  if (DEEPSEEK_KEY)
-    return askOpenAICompat('https://api.deepseek.com/v1', DEEPSEEK_KEY, 'deepseek-chat', prompt);
-  if (OPENROUTER_KEY)
-    return askOpenAICompat('https://openrouter.ai/api/v1', OPENROUTER_KEY, OPENROUTER_MODEL, prompt, {
-      'HTTP-Referer': 'http://localhost:3000',
-      'X-Title': 'Short Video Assistant',
-    });
-  if (GEMINI_KEY)
-    return askGemini(prompt);
+  if (CUSTOM_BASE && CUSTOM_KEY) return askOpenAICompat(CUSTOM_BASE, CUSTOM_KEY, CUSTOM_MODEL, prompt);
+  if (DEEPSEEK_KEY)              return askOpenAICompat('https://api.deepseek.com/v1', DEEPSEEK_KEY, 'deepseek-chat', prompt);
+  if (OR_KEY)                    return askOpenAICompat('https://openrouter.ai/api/v1', OR_KEY, OR_MODEL, prompt, { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'Shop Explorer' });
+  if (GEMINI_KEY)                return askGemini(prompt);
   throw new Error('NO_KEY');
 }
 
+// ── 店铺信息摘要（供 prompt 复用）────────────────────────────────────────────
+function shopDesc(shop: ShopInfo): string {
+  return `店名：${shop.name}
+类型：${shop.type}
+人均：${shop.avgPrice}
+特色/卖点：${shop.highlights}${shop.area ? `\n区域：${shop.area}` : ''}`;
+}
 
-// ── 1. 选题 ───────────────────────────────────────────────────────────────
-export async function genTopics(niche: string, platform: Platform): Promise<TopicIdea[]> {
+// ── 1. 选题 ───────────────────────────────────────────────────────────────────
+export async function genTopics(shop: ShopInfo, platform: Platform): Promise<TopicIdea[]> {
   const platformHints: Record<Platform, string> = {
-    抖音:    "15-60秒竖屏，情绪驱动，强钩子，快剪",
-    小红书:  "图文或1-3分钟，干货种草，真实感，标题含关键词",
-    B站:     "3-15分钟横屏，深度内容，知识性，弹幕文化",
-    视频号:  "1-3分钟，偏中年，温情实用，微信生态裂变",
-    YouTube: "5-20分钟，SEO驱动，结构清晰，订阅引导",
+    '抖音本地生活': '竖屏15-60秒，钩子强，情绪驱动，带地址/团购引导',
+    '小红书':      '种草笔记，真实感，标题含关键词，图文或短视频',
+    '大众点评':    '客观评价，打分感，适合信息量大的测评风格',
+    '视频号':      '温情真实，适合中年用户，朋友圈裂变属性',
+    '快手':        '接地气，下沉市场，性价比和真实感优先',
   };
 
-  const raw = await ask(`
-你是中国顶级短视频内容策划，精通${platform}生态（${platformHints[platform]}）。
+  const raw = await ask(`平台：${platform}（${platformHints[platform]}）
 
-创作者赛道：${niche}
+${shopDesc(shop)}
 
-生成4个高潜力选题。每个选题必须：
-- 有强烈好奇心/情绪/信息差驱动
-- 符合${platform}算法偏好
-- 普通创作者能独立完成
+为这家店生成4个差异化探店选题。角度覆盖：测评型、种草型、探秘型、性价比型。
 
-返回JSON数组，不要markdown标记：
+返回JSON数组：
 [
   {
     "id": "1",
-    "title": "标题（含emoji，≤20字）",
-    "hook": "前3秒钩子（≤25字，制造悬念/冲击/共鸣）",
-    "angle": "差异化切入角度（一句话）",
-    "audience": "精准人群画像（≤15字）",
-    "potential": "预估量级（如：10万+）"
+    "title": "视频标题（含emoji，≤20字，高点击率）",
+    "hook": "开场钩子（前3秒说的话，≤25字，制造悬念或冲击）",
+    "angle": "切入角度（测评/种草/探秘/性价比，一句话说清差异化）",
+    "audience": "目标人群（≤15字）",
+    "potential": "预估播放量级（如：5万+）"
   }
 ]`);
 
   return JSON.parse(raw) as TopicIdea[];
 }
 
-// ── 3. 脚本 ───────────────────────────────────────────────────────────────
-export async function genScript(
-  topic: TopicIdea,
-  platform: Platform,
-  duration: string
-): Promise<Script> {
-  const raw = await ask(`
-你是专业${platform}短视频编剧，写高完播率分镜脚本。
+// ── 3. 脚本 ───────────────────────────────────────────────────────────────────
+export async function genScript(topic: TopicIdea, shop: ShopInfo, platform: Platform, duration: string): Promise<Script> {
+  const raw = await ask(`平台：${platform}，目标时长：${duration}
+
+${shopDesc(shop)}
 
 选题：${topic.title}
 钩子：${topic.hook}
 角度：${topic.angle}
-目标时长：${duration}
 
-返回JSON（不要markdown）：
+生成完整探店分镜脚本。结构必须包含：到店门头→店内环境→产品/服务体验→价格性价比→总结评价→引导打卡。
+
+返回JSON：
 {
-  "duration": "实际预估时长",
+  "duration": "预估时长",
   "lines": [
     {
-      "ts": "0:00-0:04",
+      "ts": "0:00-0:05",
       "type": "hook",
-      "copy": "口播文案（口语化，能直接读）",
-      "visual": "画面/动作/转场说明"
-    },
-    {
-      "ts": "0:04-0:12",
-      "type": "narration",
-      "copy": "...",
-      "visual": "..."
+      "copy": "口播文案（口语化，直接可读）",
+      "visual": "画面/动作说明（具体可执行）"
     }
   ]
 }
 
-type枚举：hook / narration / action / broll / cta
-lines应有6-10条，覆盖完整叙事弧。文案要接地气，直接可用。`);
+type枚举：hook / arrival / environment / product / price / verdict / cta
+共6-9条，覆盖完整探店叙事。文案接地气，有真实探店感。`);
 
   return JSON.parse(raw) as Script;
 }
 
-// ── 4. 拍摄指南 ───────────────────────────────────────────────────────────
-export async function genShootingGuide(
-  script: Script,
-  platform: Platform
-): Promise<ShootingGuide> {
-  const visualSummary = script.lines
-    .map(l => `[${l.ts}] ${l.type}: ${l.visual}`)
-    .join("\n");
+// ── 4. 拍摄指南 ───────────────────────────────────────────────────────────────
+export async function genShootingGuide(script: Script, shop: ShopInfo): Promise<ShootingGuide> {
+  const visualSummary = script.lines.map(l => `[${l.ts}] ${l.type}: ${l.visual}`).join('\n');
 
-  const raw = await ask(`
-你是短视频拍摄导演，为手机竖屏独立创作者设计拍摄方案。
+  const raw = await ask(`探店视频拍摄指南。
 
-平台：${platform}
+${shopDesc(shop)}
+
 脚本画面摘要：
 ${visualSummary}
 
-返回JSON（不要markdown）：
+返回JSON：
 {
-  "gear": [
-    "设备1（具体型号或类型，价格区间）",
-    "设备2"
-  ],
+  "gear": ["器材（具体，含价格参考）"],
   "shots": [
     {
       "order": 1,
       "ref": "对应脚本时间段",
-      "angle": "机位名称（如：正面平拍/45°仰角/俯拍）",
+      "angle": "机位（如：门头正面平拍）",
       "duration": "建议拍摄时长",
-      "notes": "具体执行要点（动作、站位、表情）"
+      "notes": "拍摄要点（具体动作/构图/注意事项）"
     }
   ],
-  "lighting": [
-    "打光要点（具体可操作）"
-  ],
-  "editing": [
-    "剪辑建议（节奏/字幕/BGM/转场）"
-  ]
+  "lighting": ["打光建议"],
+  "editing": ["剪辑建议"]
 }
 
-gear 4-5条，shots 4-6条，lighting 3条，editing 4条。实用为主。`);
+gear 4-5条，shots 5-7条（覆盖门头/环境/产品/价格牌/结账等），lighting 3条，editing 4条。`);
 
   return JSON.parse(raw) as ShootingGuide;
 }
 
-// ── 5. 发布配置 ───────────────────────────────────────────────────────────
-export async function genPublishKit(
-  topic: TopicIdea,
-  platform: Platform
-): Promise<PublishKit> {
+// ── 5. 发布配置 ───────────────────────────────────────────────────────────────
+export async function genPublishKit(topic: TopicIdea, shop: ShopInfo, platform: Platform): Promise<PublishKit> {
   const bestTimes: Record<Platform, string> = {
-    抖音:    "12:00–13:00 / 18:00–20:00 / 21:00–22:00",
-    小红书:  "07:00–09:00 / 12:00–13:00 / 21:00–23:00",
-    B站:     "17:00–21:00（工作日）/ 10:00–12:00（周末）",
-    视频号:  "08:00–10:00 / 20:00–22:00",
-    YouTube: "15:00–17:00（美西）/ 周四–周六",
+    '抖音本地生活': '11:00-13:00 / 17:00-19:00（饭点前后流量高）',
+    '小红书':      '07:00-09:00 / 21:00-23:00',
+    '大众点评':    '10:00-12:00 / 14:00-16:00',
+    '视频号':      '08:00-10:00 / 20:00-22:00',
+    '快手':        '12:00-14:00 / 20:00-22:00',
   };
 
-  const raw = await ask(`
-你是${platform}运营专家，写高点击率发布配置。
+  const raw = await ask(`${platform}探店发布配置。
+
+${shopDesc(shop)}
 
 选题：${topic.title}
 钩子：${topic.hook}
-人群：${topic.audience}
-平台：${platform}
-最佳时段参考：${bestTimes[platform]}
+最佳时段：${bestTimes[platform]}
 
-返回JSON（不要markdown）：
+返回JSON：
 {
   "title": "发布标题（≤20字，含emoji，高点击率）",
-  "caption": "正文/简介（3-5句，含互动引导，口语化）",
+  "caption": "正文文案（3-5句，含店名/人均/推荐单品/互动引导，口语化）",
   "hashtags": ["话题1","话题2","话题3","话题4","话题5","话题6","话题7","话题8"],
   "bestTime": "${bestTimes[platform]}",
-  "coverTip": "封面构图建议（具体：构图/文字/表情）",
-  "tips": [
-    "${platform}特有运营技巧1",
-    "技巧2",
-    "技巧3"
-  ]
+  "coverTip": "封面建议（构图/文字/视觉重点）",
+  "tips": ["${platform}本地生活运营技巧1","技巧2","技巧3"]
 }
 
-hashtags选大流量+精准垂类的组合。`);
+hashtags 要包含：店名、品类、区域探店、${platform}相关话题的组合。`);
 
   return JSON.parse(raw) as PublishKit;
 }
 
-// ── Mock fallbacks（无API Key时使用） ─────────────────────────────────────
-export function mockTopics(niche: string): TopicIdea[] {
+// ── Mock fallbacks ────────────────────────────────────────────────────────────
+export function mockTopics(shop: ShopInfo): TopicIdea[] {
   return [
-    { id:"1", title:`🔥 ${niche}入门最容易踩的3个坑`, hook:"我花了6个月和5000块踩坑，今天全告诉你", angle:"踩坑总结，降低试错成本", audience:"刚入门的新手", potential:"50万+" },
-    { id:"2", title:`💡 靠${niche}月入过万的真实路径`, hook:"99%的人不知道这个变现方式，同行看到可能会删掉我这条", angle:"揭秘信息差，激发curiosity", audience:"想副业变现的上班族", potential:"百万+" },
-    { id:"3", title:`📈 坚持${niche}30天，我变了多少`, hook:"30天前和现在对比，连我自己都不敢相信", angle:"变化对比，情绪共鸣", audience:"想改变现状的普通人", potential:"30万+" },
-    { id:"4", title:`⚡ ${niche}这件事，越早知道越好`, hook:"如果你也想做这个，先停下来听我说完", angle:"经验输出，建立专家人设", audience:"有意向但还在观望的人", potential:"20万+" },
+    { id:'1', title:`🔍 实测${shop.name}，${shop.avgPrice}能吃到什么水平？`, hook:`附近的${shop.type}我都吃遍了，这家让我破防了`, angle:'测评型：客观评分，信息量大', audience:'附近想吃饭的上班族', potential:'5万+' },
+    { id:'2', title:`✨ 藏在附近的宝藏${shop.type}！强烈安利`, hook:`这家店我已经来了三次了，今天必须给你们种草`, angle:'种草型：情绪驱动，真实推荐', audience:'喜欢探索本地好店的年轻人', potential:'3万+' },
+    { id:'3', title:`🤫 ${shop.name}老板不让我拍，但我还是来了`, hook:`这家${shop.type}低调开了两年，附近人都不知道`, angle:'探秘型：制造悬念，激发好奇', audience:'好奇心强的本地用户', potential:'10万+' },
+    { id:'4', title:`💰 ${shop.avgPrice}在${shop.name}能点啥？性价比测评`, hook:`花${shop.avgPrice}在这家${shop.type}到底值不值？我来告诉你`, angle:'性价比型：实用信息，帮助决策', audience:'注重性价比的消费者', potential:'8万+' },
   ];
 }
 
-export function mockScript(topic: TopicIdea): Script {
+export function mockScript(topic: TopicIdea, shop: ShopInfo): Script {
   const lines: ScriptLine[] = [
-    { ts:"0:00-0:04", type:"hook",      copy: topic.hook, visual:"正对镜头，表情坚定/惊讶，可加字幕特效" },
-    { ts:"0:04-0:12", type:"narration", copy:"我做这件事已经一年了，踩过很多坑，今天全部告诉你们，直接跳过弯路。", visual:"面对镜头口播，背景整洁" },
-    { ts:"0:12-0:28", type:"narration", copy:"第一点，也是最重要的——你必须先搞清楚自己的定位。很多人一上来就拍，结果100条没有一条爆，就是因为这个。", visual:"口播+手势辅助，切换字幕动画" },
-    { ts:"0:28-0:42", type:"action",    copy:"第二点，内容要有信息增量。观众看你的视频要能带走点什么，不然他为什么要关注你？", visual:"切换演示画面/PPT/手机截图展示对比" },
-    { ts:"0:42-0:52", type:"broll",     copy:"第三点，坚持比什么都重要。前100条可能没什么水花，量变一定引起质变。", visual:"B-roll：日历翻页/工作场景/创作过程" },
-    { ts:"0:52-1:00", type:"cta",       copy:"如果对你有帮助，点个赞支持！评论区告诉我你在做哪个方向，我来帮你分析～", visual:"面对镜头，微笑，手指向下方点赞区" },
+    { ts:'0:00-0:05', type:'hook',        copy: topic.hook, visual:'门头外正面拍，字幕特效强调，表情惊讶' },
+    { ts:'0:05-0:12', type:'arrival',     copy:`这里是${shop.name}，就在${shop.area || '附近'}，${shop.type}，人均${shop.avgPrice}，今天带大家来实测。`, visual:'门头招牌全景，缓慢推进，带地址字幕' },
+    { ts:'0:12-0:22', type:'environment', copy:`进来第一感觉——${shop.highlights.split('，')[0] || '环境不错'}。看这里…`, visual:'店内环境横扫镜头，重点拍特色装修或陈设' },
+    { ts:'0:22-0:40', type:'product',     copy:`点了招牌的几样，来看看卖相…味道的话，${shop.highlights}，确实没让我失望。`, visual:'产品/服务特写，慢动作或定格展示，突出质感' },
+    { ts:'0:40-0:50', type:'price',       copy:`价格方面，我点了这些，一共花了…人均下来${shop.avgPrice}左右，${shop.type}这个价位我觉得合理的。`, visual:'菜单/价格牌特写，或展示结账小票' },
+    { ts:'0:50-0:57', type:'verdict',     copy:`总体来说，${shop.highlights}，值得来打卡。`, visual:'回到门头或店内，边说边点头' },
+    { ts:'0:57-1:02', type:'cta',         copy:`你们附近有这样的宝藏店吗？评论区告诉我，关注我带你发现更多本地好店～`, visual:'面对镜头，微笑，手指向下方点赞区' },
   ];
-  return { duration:"约60秒", lines };
+  return { duration:'约60秒', lines };
 }
 
-export function mockShootingGuide(): ShootingGuide {
+export function mockShootingGuide(shop: ShopInfo): ShootingGuide {
   return {
     gear: [
-      "手机（推荐竖拍4K，固定在支架上）",
-      "手机三脚架 / 稳定器（50元以内即可）",
-      "环形补光灯（室内必备，¥80-200）",
-      "领夹麦克风（收音效果是手机麦的10倍，¥50-200）",
-      "白色泡沫板（充当反光板，消除阴影）",
+      '手机（竖拍4K，固定支架避免抖动）',
+      '手持稳定器（拍进店走动镜头必备，¥200-500）',
+      '广角镜头夹片（拍店内环境更有空间感，¥30-80）',
+      '补光灯（餐厅光线复杂时补脸，¥80-200）',
+      '领夹麦克风（嘈杂店内收音清晰，¥50-200）',
     ],
     shots: [
-      { order:1, ref:"0:00-0:04 Hook",      angle:"正面平拍（镜头≈眼高）",      duration:"拍5-8条备选", notes:"开口前深呼吸，第一句话要有力度，眼神看镜头不看屏幕" },
-      { order:2, ref:"0:04-0:28 口播主体",  angle:"正面略微仰角（显气场）",     duration:"按脚本段落分开拍，每段2-3条", notes:"语速比日常稍快，关键词用手势强调，保持稳定站位" },
-      { order:3, ref:"0:28-0:42 演示段",    angle:"俯拍桌面 或 侧拍操作",       duration:"每个动作拍10秒以上留余量", notes:"展示产品/操作/对比，后期剪辑覆盖在口播上" },
-      { order:4, ref:"0:42-0:52 B-roll",    angle:"多角度补充空镜",             duration:"各10秒", notes:"日历、工作台、道具特写，增加视频质感" },
-      { order:5, ref:"0:52-1:00 CTA",       angle:"正面，略靠近镜头",           duration:"拍3条备选", notes:"语气轻松带微笑，说完保持3秒再停录" },
+      { order:1, ref:'门头/到店 0:05-0:12', angle:'门头正面平拍', duration:'拍5-10秒', notes:'包含店招、门口环境，最好有人进出增加生动感，带入地址字幕' },
+      { order:2, ref:'店内环境 0:12-0:22', angle:'进门后横扫全景', duration:'缓慢移动8-10秒', notes:'从入口往里扫，捕捉装修风格、客流、特色陈列，稳定器跟拍' },
+      { order:3, ref:'产品特写 0:22-0:40', angle:'俯拍45°或正面特写', duration:'每个产品拍5-8秒', notes:`重点拍${shop.type === '餐饮' ? '菜品摆盘、食材质感' : '产品细节、使用过程'}，可用慢动作增加质感` },
+      { order:4, ref:'价格/菜单 0:40-0:50', angle:'正面平拍价格牌/菜单', duration:'3-5秒', notes:'清晰可读，适当停留让观众看清价格，是观众最关心的信息' },
+      { order:5, ref:'体验过程', angle:'第一视角或侧拍', duration:'10-15秒', notes:'真实体验过程，展示服务/口感/使用感，真实感比完美画面更重要' },
+      { order:6, ref:'结尾总结/CTA', angle:'正面对镜，门头前', duration:'拍3条备选', notes:'表情自然，语气轻松，说完后保持微笑2秒再停录' },
     ],
     lighting: [
-      "最优：面向窗户自然光，柔和均匀，避免正午强光",
-      "室内：45°斜前方放补光灯，对侧泡沫板反光消除阴影",
-      "避坑：头顶正上方吊灯会产生眼袋阴影，务必关掉",
+      '餐厅暖光不够亮时：用小补光灯45°侧打脸部，避免食物色差失真',
+      '拍菜品：关掉强顶光，用手机补光灯从侧上方打，食物质感更好',
+      '室外门头：选散射光时段（非正午），避免强阴影影响字幕可读性',
     ],
     editing: [
-      "节奏：口播每段不超过5秒切一次，保持张力",
-      "字幕：全程字幕，关键词加粗+彩色高亮，字号够大",
-      "BGM：纯音乐压到口播音量的15-20%，节奏与内容匹配",
-      "开头3秒绝不放logo/片头，直接从第一句话开始",
+      '节奏：探店视频每段不超过8秒切一次，保持新鲜感',
+      '字幕：全程字幕 + 关键信息（价格/地址/推荐单品）加大字高亮',
+      '音乐：轻松愉快的背景音乐，压到口播20%以下，饭点内容用食欲感BGM',
+      '开头3秒：直接上最好看的菜品或最吸引人的画面，不要废话',
     ],
   };
 }
 
-export function mockPublishKit(topic: TopicIdea, platform: Platform): PublishKit {
+export function mockPublishKit(topic: TopicIdea, shop: ShopInfo, platform: Platform): PublishKit {
   const bestTimes: Record<Platform, string> = {
-    抖音:"12:00–13:00 / 18:00–20:00", 小红书:"07:00–09:00 / 21:00–23:00",
-    B站:"17:00–21:00", 视频号:"08:00–10:00 / 20:00–22:00", YouTube:"15:00–17:00（美西）",
+    '抖音本地生活':'11:00-13:00 / 17:00-19:00', '小红书':'07:00-09:00 / 21:00-23:00',
+    '大众点评':'10:00-12:00', '视频号':'08:00-10:00 / 20:00-22:00', '快手':'12:00-14:00 / 20:00-22:00',
   };
   return {
     title: topic.title,
-    caption: `${topic.hook}\n\n今天把自己踩过的坑全部分享出来，希望对你有帮助～\n\n你们有什么问题评论区告诉我！`,
-    hashtags: ["新手必看","干货分享","涨粉攻略","内容创作","副业","个人成长","经验分享","学习"],
+    caption: `${topic.hook}\n\n📍 ${shop.name} | 人均${shop.avgPrice} | ${shop.type}\n${shop.highlights}\n\n你们去过吗？评论区聊聊～`,
+    hashtags: [shop.name, `${shop.type}推荐`, '探店', '本地生活', '附近好店', '宝藏店', `${shop.area || ''}探店`.trim(), platform],
     bestTime: bestTimes[platform],
-    coverTip: "选视频中表情最自然的帧；叠加大字标题（白字黑边或反色），字在左侧，人在右侧；避免文字被平台UI遮挡",
+    coverTip: '封面选最好看的产品特写 + 店名字幕（大字白底或反色），左上角标人均价格，视觉冲击力强',
     tips: [
-      `发布后前30分钟密集回复评论，提升${platform}推荐权重`,
-      "第一条评论自己写一个引导性问题，促进互动",
-      "蹭平台当天热门话题/挑战赛，借助官方流量扶持",
+      `发布时记得添加 ${platform} 的 POI 地址标签，能获得额外本地流量推荐`,
+      '发布后第一时间在评论区置顶：地址+营业时间+推荐单品，降低用户决策门槛',
+      `${platform}本地探店内容优先推给3公里内用户，发布时间选饭点前1小时效果最好`,
     ],
   };
 }
