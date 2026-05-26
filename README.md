@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Local Script Gen · 本地生活短视频脚本生成器
 
-# Run and deploy your AI Studio app
+为本地商家生成短视频脚本，支持三种格式：
+- **② 云剪型** — 素材包 → 批量分发
+- **④ 痛点问答型** — 搜索流量 → 决策转化  
+- **⑤ 幕后制作型** — 过程即内容 → 品牌信任
 
-This contains everything you need to run your app locally.
+## 本地运行
 
-View your app in AI Studio: https://ai.studio/apps/drive/146w0sd3xbichSE4pU9EI7wfE18ccz9MF
+**前提：** Node.js
 
-## Run Locally
+1. 安装依赖：
+   ```
+   npm install
+   ```
 
-**Prerequisites:**  Node.js
+2. 获取免费 Groq API Key：
+   - 注册：https://console.groq.com
+   - 创建 API Key（免费，无需信用卡）
 
+3. 在项目根目录创建 `.env.local`：
+   ```
+   GROQ_API_KEY=gsk_xxxxxxxxxx
+   ```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+4. 启动：
+   ```
+   npm run dev
+   ```
