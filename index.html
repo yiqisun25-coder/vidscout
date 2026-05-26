@@ -3,80 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NekoFit - 猫猫减重记</title>
+    <title>短视频助手</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300;400;500;700;800&family=Patrick+Hand&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
     <style>
       body {
-        font-family: 'M PLUS Rounded 1c', sans-serif;
-        background-color: #fffaf9; /* Warm off-white */
-        color: #475569; /* Slate-600 */
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: #020617; /* slate-950 */
+        color: #f1f5f9;
       }
-      .font-hand {
-        font-family: 'Patrick Hand', cursive;
-      }
-      .font-brush {
-        font-family: 'Ma Shan Zheng', cursive;
-      }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #fca5a5;
-        border-radius: 10px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #f87171;
-      }
-      
-      /* Grid Paper Pattern */
-      .bg-grid-paper {
-        background-color: #fffbf7;
-        background-image: 
-          linear-gradient(#e5e7eb 1px, transparent 1px),
-          linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
-        background-size: 20px 20px;
-      }
-
-      /* Animation */
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-5px); }
-        100% { transform: translateY(0px); }
-      }
-      .animate-float {
-        animation: float 3s ease-in-out infinite;
-      }
-      
-      /* Polaroid Develop Animation */
-      @keyframes develop {
-        0% { filter: brightness(5) blur(10px); opacity: 0; transform: translateY(-20px) scale(0.9); }
-        50% { filter: brightness(2) blur(5px); opacity: 1; }
-        100% { filter: brightness(1) blur(0); opacity: 1; transform: translateY(0) scale(1); }
-      }
-      .animate-develop {
-        animation: develop 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-      }
-      
-      @keyframes slideDown {
-        from { transform: translateY(-100%); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      .animate-slide-down {
-        animation: slideDown 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
+      ::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
   <script type="importmap">
 {
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
@@ -86,5 +31,6 @@
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

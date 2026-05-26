@@ -1,206 +1,387 @@
-import React, { useState, useEffect } from 'react';
-import { ViewState, WeightEntry, VisionItem, DailyStats, JournalEntry } from './types';
-import Dashboard from './components/Dashboard';
-import VisionBoard from './components/VisionBoard';
-import Journal from './components/Journal';
-import { MOCK_WEIGHT_DATA, INITIAL_VISION_BOARD, MOCK_JOURNAL, APP_NAME } from './constants';
-import { LayoutGrid, Image, Settings, BookHeart } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Project, Platform, WorkflowStep } from './types';
+import {
+  APP_NAME, PLATFORM_EMOJI, STATUS_LABEL, STATUS_COLOR,
+  STEP_META, STORAGE_KEY,
+} from './constants';
+import TopicPanel    from './components/TopicPanel';
+import SchedulePanel from './components/SchedulePanel';
+import ScriptPanel   from './components/ScriptPanel';
+import ShootingPanel from './components/ShootingPanel';
+import PublishPanel  from './components/PublishPanel';
+import {
+  Plus, ArrowLeft, Video, Trash2, Calendar, ChevronRight, Clapperboard,
+} from 'lucide-react';
 
-const App: React.FC = () => {
-  const [view, setView] = useState<ViewState>('dashboard');
-  const [weights, setWeights] = useState<WeightEntry[]>([]);
-  const [visionItems, setVisionItems] = useState<VisionItem[]>([]);
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
-  const [dailyStats, setDailyStats] = useState<DailyStats>({ waterCount: 0, lastWaterDate: '' });
-  const [mounted, setMounted] = useState(false);
+// ── helpers ──────────────────────────────────────────────────────────────────
+function newProject(platform: Platform, niche: string): Project {
+  const now = new Date().toISOString();
+  return {
+    id: Date.now().toString(),
+    platform,
+    niche,
+    status: 'idea',
+    step: 'topic',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
-  // Initialize Data
-  useEffect(() => {
-    const savedWeights = localStorage.getItem('weights');
-    const savedVision = localStorage.getItem('vision');
-    const savedJournal = localStorage.getItem('journal');
-    const savedStats = localStorage.getItem('dailyStats');
+function load(): Project[] {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]'); }
+  catch { return []; }
+}
+function save(projects: Project[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
 
-    if (savedWeights) setWeights(JSON.parse(savedWeights));
-    else setWeights(MOCK_WEIGHT_DATA);
+// ── sub-views ─────────────────────────────────────────────────────────────────
+type AppView = 'list' | 'editor' | 'new';
 
-    if (savedVision) setVisionItems(JSON.parse(savedVision));
-    else setVisionItems(INITIAL_VISION_BOARD);
+// ── App ───────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [view, setView]         = useState<AppView>('list');
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-    if (savedJournal) setJournalEntries(JSON.parse(savedJournal));
-    else setJournalEntries(MOCK_JOURNAL);
+  // new-project form
+  const [newPlatform, setNewPlatform] = useState<Platform>('抖音');
+  const [newNiche,    setNewNiche]    = useState('');
+  const [newErr,      setNewErr]      = useState('');
 
-    const today = new Date().toISOString().split('T')[0];
-    if (savedStats) {
-      const parsed = JSON.parse(savedStats);
-      if (parsed.lastWaterDate === today) {
-        setDailyStats(parsed);
-      } else {
-        setDailyStats({ waterCount: 0, lastWaterDate: today });
-      }
-    } else {
-      setDailyStats({ waterCount: 0, lastWaterDate: today });
-    }
+  useEffect(() => { setProjects(load()); }, []);
 
-    setMounted(true);
+  /* ── mutations ──────────────────────────────────────────────────────────── */
+  const upsert = useCallback((p: Project) => {
+    setProjects(prev => {
+      const next = prev.some(x => x.id === p.id)
+        ? prev.map(x => x.id === p.id ? p : x)
+        : [p, ...prev];
+      save(next);
+      return next;
+    });
   }, []);
 
-  // Persistence
-  useEffect(() => {
-    if (mounted) {
-      localStorage.setItem('weights', JSON.stringify(weights));
-      localStorage.setItem('vision', JSON.stringify(visionItems));
-      localStorage.setItem('journal', JSON.stringify(journalEntries));
-      localStorage.setItem('dailyStats', JSON.stringify(dailyStats));
-    }
-  }, [weights, visionItems, journalEntries, dailyStats, mounted]);
-
-  const handleAddWeight = (weight: number, date: string, note: string) => {
-    const newEntry: WeightEntry = {
-      id: Date.now().toString(),
-      weight,
-      date,
-      note
-    };
-    setWeights(prev => {
-      const existingIndex = prev.findIndex(p => p.date === date);
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = { ...updated[existingIndex], weight, note };
+  const patchActive = useCallback((patch: Partial<Project>) => {
+    setProjects(prev => {
+      const next = prev.map(p => {
+        if (p.id !== activeId) return p;
+        const updated = { ...p, ...patch, updatedAt: new Date().toISOString() };
         return updated;
-      }
-      return [...prev, newEntry];
+      });
+      save(next);
+      return next;
     });
-  };
+  }, [activeId]);
 
-  const handleAddVision = (item: VisionItem) => {
-    setVisionItems(prev => [item, ...prev]);
-  };
+  const deleteProject = useCallback((id: string) => {
+    if (!confirm('确认删除这个项目？')) return;
+    setProjects(prev => {
+      const next = prev.filter(p => p.id !== id);
+      save(next);
+      return next;
+    });
+    if (activeId === id) { setActiveId(null); setView('list'); }
+  }, [activeId]);
 
-  const handleRemoveVision = (id: string) => {
-    setVisionItems(prev => prev.filter(item => item.id !== id));
-  };
+  /* ── derived ────────────────────────────────────────────────────────────── */
+  const active = projects.find(p => p.id === activeId) ?? null;
+  const stepIdx = active ? STEP_META.findIndex(s => s.id === active.step) : 0;
 
-  const handleAddJournal = (entry: JournalEntry) => {
-    setJournalEntries(prev => [entry, ...prev]);
-  };
+  /* ── handlers ───────────────────────────────────────────────────────────── */
+  function openProject(id: string) {
+    setActiveId(id);
+    setView('editor');
+  }
 
-  const handleUpdateWater = (count: number) => {
-    const today = new Date().toISOString().split('T')[0];
-    setDailyStats({ waterCount: count, lastWaterDate: today });
-  };
+  function createProject() {
+    if (!newNiche.trim()) { setNewErr('请填写内容方向'); return; }
+    const p = newProject(newPlatform, newNiche.trim());
+    upsert(p);
+    setActiveId(p.id);
+    setNewNiche('');
+    setNewErr('');
+    setView('editor');
+  }
 
-  if (!mounted) return null;
+  function goStep(s: WorkflowStep) {
+    patchActive({ step: s });
+  }
 
+  /* ── render ─────────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-[#fffaf9] text-slate-800 font-rounded selection:bg-rose-200">
-      
-      {/* Header (Minimal) */}
-      <header className="fixed top-0 left-0 right-0 z-30 pt-6 px-6 pb-2 pointer-events-none">
-        <div className="max-w-lg mx-auto flex items-center justify-between pointer-events-auto">
-          <h1 className="text-xl font-black text-rose-400 tracking-tight flex items-center gap-2 opacity-0">
-             {/* Hidden title for spacing */}
-            {APP_NAME}
-          </h1>
-          <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors bg-white/50 backdrop-blur rounded-full shadow-sm border border-slate-100">
-            <Settings size={20} />
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <div className="max-w-2xl mx-auto px-4 pt-8 pb-24">
 
-      {/* Main Content Area */}
-      <main className="max-w-lg mx-auto pt-24 min-h-screen">
-        <div className="animate-fade-in">
-          {view === 'dashboard' && (
-            <div className="px-6">
-               <div className="mb-6 flex items-center gap-2 text-rose-500">
-                  <span className="text-2xl">🐾</span>
-                  <span className="font-black text-xl tracking-tight">{APP_NAME}</span>
-               </div>
-               <Dashboard 
-                data={weights} 
-                onAddEntry={handleAddWeight} 
-                dailyStats={dailyStats}
-                onUpdateWater={handleUpdateWater}
-              />
+        {/* ── HEADER ───────────────────────────────────────────────────────── */}
+        <header className="flex items-center justify-between mb-8">
+          {view !== 'list' ? (
+            <button
+              onClick={() => { setView('list'); setActiveId(null); }}
+              className="flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm"
+            >
+              <ArrowLeft size={16} /> 项目列表
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Clapperboard size={20} className="text-violet-400" />
+              <span className="font-bold text-slate-100 text-lg tracking-tight">{APP_NAME}</span>
             </div>
           )}
-          {view === 'vision' && (
-            <VisionBoard 
-              items={visionItems} 
-              onAddItem={handleAddVision} 
-              onRemoveItem={handleRemoveVision}
-            />
+
+          {view === 'list' && (
+            <button
+              onClick={() => setView('new')}
+              className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition-all"
+            >
+              <Plus size={15} /> 新项目
+            </button>
           )}
-          {view === 'journal' && (
-            <Journal 
-              entries={journalEntries}
-              onAddEntry={handleAddJournal}
-            />
+          {view === 'editor' && active && (
+            <button
+              onClick={() => deleteProject(active.id)}
+              className="p-2 text-slate-600 hover:text-red-400 transition-colors"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </header>
+
+        {/* ── NEW PROJECT FORM ─────────────────────────────────────────────── */}
+        {view === 'new' && (
+          <div className="space-y-5">
+            <h2 className="text-lg font-bold text-slate-100">新建项目</h2>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">
+                发布平台
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(['抖音','小红书','B站','视频号','YouTube'] as Platform[]).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setNewPlatform(p)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                      newPlatform === p
+                        ? 'bg-violet-600 border-violet-500 text-white shadow-lg shadow-violet-900/40'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
+                    }`}
+                  >
+                    {PLATFORM_EMOJI[p]} {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">
+                内容方向 / 赛道
+              </label>
+              <input
+                autoFocus
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
+                placeholder="例：职场干货、美食探店、健身减脂、数码评测…"
+                value={newNiche}
+                onChange={e => { setNewNiche(e.target.value); setNewErr(''); }}
+                onKeyDown={e => e.key === 'Enter' && createProject()}
+              />
+              {newErr && <p className="text-red-400 text-xs mt-1">{newErr}</p>}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setView('list')}
+                className="flex-1 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 text-sm font-medium transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={createProject}
+                className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm shadow-lg shadow-violet-900/40 transition-all"
+              >
+                创建并开始 →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── PROJECT LIST ─────────────────────────────────────────────────── */}
+        {view === 'list' && (
+          <div className="space-y-4">
+            {projects.length === 0 ? (
+              <div className="text-center py-24 space-y-4">
+                <Video size={48} className="mx-auto text-slate-700" />
+                <p className="text-slate-500 text-sm">还没有项目</p>
+                <p className="text-slate-600 text-xs">点击右上角「新项目」开始你的第一条短视频</p>
+              </div>
+            ) : (
+              <>
+                {/* Stats bar */}
+                <div className="grid grid-cols-4 gap-2 mb-6">
+                  {(['idea','scripting','shooting','published'] as Project['status'][]).map(s => {
+                    const count = projects.filter(p => p.status === s).length;
+                    return (
+                      <div key={s} className={`rounded-xl border p-3 text-center ${STATUS_COLOR[s]}`}>
+                        <div className="text-xl font-bold">{count}</div>
+                        <div className="text-xs opacity-70 mt-0.5">{STATUS_LABEL[s]}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Project cards */}
+                {[...projects]
+                  .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                  .map(p => (
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      onOpen={() => openProject(p.id)}
+                      onDelete={() => deleteProject(p.id)}
+                    />
+                  ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── PROJECT EDITOR ────────────────────────────────────────────────── */}
+        {view === 'editor' && active && (
+          <div className="space-y-6">
+
+            {/* Project title bar */}
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{PLATFORM_EMOJI[active.platform]}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-slate-100 truncate">
+                  {active.topic?.title ?? active.niche}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {active.platform} · {active.niche}
+                  {active.publishDate && (
+                    <span className="ml-2 text-violet-400">
+                      <Calendar size={10} className="inline mr-0.5" />
+                      {active.publishDate}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLOR[active.status]}`}>
+                {STATUS_LABEL[active.status]}
+              </span>
+            </div>
+
+            {/* Step tabs */}
+            <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1">
+              {STEP_META.map((s, i) => {
+                const isCurrent = active.step === s.id;
+                const isDone    = i < stepIdx;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => goStep(s.id)}
+                    className={`flex-1 flex flex-col items-center py-2 px-1 rounded-lg text-xs font-medium transition-all ${
+                      isCurrent
+                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/40'
+                        : isDone
+                        ? 'text-emerald-400 hover:bg-slate-800'
+                        : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
+                    }`}
+                  >
+                    <span className="text-base leading-none mb-0.5">
+                      {isDone && !isCurrent ? '✅' : s.emoji}
+                    </span>
+                    <span className="hidden sm:block">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Step description */}
+            <div className="text-xs text-slate-500 -mt-2">
+              {STEP_META[stepIdx]?.desc}
+            </div>
+
+            {/* Panel content */}
+            <div>
+              {active.step === 'topic'    && <TopicPanel    project={active} onChange={patchActive} />}
+              {active.step === 'schedule' && <SchedulePanel project={active} onChange={patchActive} />}
+              {active.step === 'script'   && <ScriptPanel   project={active} onChange={patchActive} />}
+              {active.step === 'shooting' && <ShootingPanel project={active} onChange={patchActive} />}
+              {active.step === 'publish'  && <PublishPanel  project={active} onChange={patchActive} />}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+/* ── Project Card ──────────────────────────────────────────────────────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ProjectCard: React.FC<{ project: Project; onOpen: () => void; onDelete: () => void }> = ({
+  project, onOpen, onDelete,
+}) => {
+  const step     = STEP_META.find(s => s.id === project.step);
+  const stepIdx  = STEP_META.findIndex(s => s.id === project.step);
+  const progress = Math.round(((stepIdx) / (STEP_META.length - 1)) * 100);
+
+  return (
+    <div
+      className="group bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl p-5 cursor-pointer transition-all"
+      onClick={onOpen}
+    >
+      <div className="flex items-start gap-3">
+        {/* Platform emoji */}
+        <div className="text-2xl flex-shrink-0 mt-0.5">{PLATFORM_EMOJI[project.platform]}</div>
+
+        <div className="flex-1 min-w-0">
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="font-semibold text-slate-100 text-sm leading-snug truncate">
+              {project.topic?.title ?? <span className="text-slate-400">{project.niche}</span>}
+            </div>
+            <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLOR[project.status]}`}>
+              {STATUS_LABEL[project.status]}
+            </span>
+          </div>
+
+          {/* Meta */}
+          <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
+            <span>{project.platform} · {project.niche}</span>
+            {project.publishDate && (
+              <span className="flex items-center gap-1 text-violet-400">
+                <Calendar size={10} /> {project.publishDate}
+              </span>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          {!project.published && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-slate-500 flex items-center gap-1">
+                  {step?.emoji} {step?.label}
+                </span>
+                <span className="text-xs text-slate-600">{progress}%</span>
+              </div>
+              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-violet-600 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+          {project.published && (
+            <div className="mt-3 text-xs text-emerald-400 font-medium">✅ 已发布 {project.publishDate}</div>
           )}
         </div>
-      </main>
 
-      {/* Bottom Navigation (Floating) */}
-      <nav className="fixed bottom-6 left-6 right-6 z-40">
-        <div className="max-w-xs mx-auto bg-slate-800/90 backdrop-blur-lg rounded-full shadow-2xl border border-slate-700/50 p-1.5 flex justify-between items-center relative">
-          
-          {/* Active Indicator Background */}
-          <div 
-            className="absolute top-1.5 bottom-1.5 w-[calc(33.33%-4px)] bg-white/10 rounded-full transition-all duration-300 ease-spring"
-            style={{ 
-              left: view === 'dashboard' ? '4px' : view === 'vision' ? 'calc(50% - (33.33%/2) + 2px)' : 'calc(100% - 33.33%)' 
-            }}
-          ></div>
-
-          <button 
-            onClick={() => setView('dashboard')}
-            className={`flex-1 flex flex-col items-center justify-center py-3 rounded-full relative z-10 transition-all duration-300 ${view === 'dashboard' ? 'text-rose-400 scale-105' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <LayoutGrid size={20} strokeWidth={view === 'dashboard' ? 3 : 2} />
-          </button>
-          
-          <button 
-            onClick={() => setView('vision')}
-            className={`flex-1 flex flex-col items-center justify-center py-3 rounded-full relative z-10 transition-all duration-300 ${view === 'vision' ? 'text-rose-400 scale-105' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <Image size={20} strokeWidth={view === 'vision' ? 3 : 2} />
-          </button>
-
-          <button 
-            onClick={() => setView('journal')}
-            className={`flex-1 flex flex-col items-center justify-center py-3 rounded-full relative z-10 transition-all duration-300 ${view === 'journal' ? 'text-rose-400 scale-105' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <BookHeart size={20} strokeWidth={view === 'journal' ? 3 : 2} />
-          </button>
-        </div>
-      </nav>
-
-      {/* Global Styles */}
-      <style>{`
-        .pb-safe {
-          padding-bottom: env(safe-area-inset-bottom);
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-        }
-        .animate-slide-up {
-          animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .ease-spring {
-          transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-      `}</style>
+        {/* Arrow */}
+        <ChevronRight size={16} className="flex-shrink-0 text-slate-600 group-hover:text-slate-400 mt-0.5 transition-colors" />
+      </div>
     </div>
   );
 };
-
-export default App;
