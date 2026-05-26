@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { VisionItem } from '../types';
-import { Plus, X, Wand2, Pin } from 'lucide-react';
+// Deprecated — replaced by script generator
+export default function VisionBoard() { return null; }
 import { generateVisionQuote } from '../services/geminiService';
 
 interface VisionBoardProps {

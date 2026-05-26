@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { JournalEntry } from '../types';
-import { Camera, Send, X, Image as ImageIcon, Smile } from 'lucide-react';
+// Deprecated — replaced by script generator
+export default function Journal() { return null; }
 
 interface JournalProps {
   entries: JournalEntry[];
