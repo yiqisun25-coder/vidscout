@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 const PROVIDER_BADGE: Record<ReturnType<typeof activeProvider>, { label: string; cls: string }> = {
+  deepseek:   { label: 'DeepSeek',   cls: 'text-blue-300   bg-blue-500/10   border-blue-500/30'   },
   openrouter: { label: 'OpenRouter', cls: 'text-violet-300 bg-violet-500/10 border-violet-500/30' },
   gemini:     { label: 'Gemini',     cls: 'text-sky-300    bg-sky-500/10    border-sky-500/30'    },
   mock:       { label: '离线模式',    cls: 'text-slate-400  bg-slate-500/10  border-slate-500/30'  },

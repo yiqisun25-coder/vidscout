@@ -2,12 +2,14 @@ import { GoogleGenAI } from "@google/genai";
 import { Platform, TopicIdea, Script, ShootingGuide, PublishKit, ScriptLine } from "../types";
 
 // ── Provider detection ────────────────────────────────────────────────────────
-// Priority: OpenRouter → Gemini → mock fallback
+// Priority: DeepSeek → OpenRouter → Gemini → mock fallback
+const DEEPSEEK_KEY    = process.env.DEEPSEEK_API_KEY;
 const OPENROUTER_KEY  = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_MODEL= process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
 const GEMINI_KEY      = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
 
-export function activeProvider(): 'openrouter' | 'gemini' | 'mock' {
+export function activeProvider(): 'deepseek' | 'openrouter' | 'gemini' | 'mock' {
+  if (DEEPSEEK_KEY)   return 'deepseek';
   if (OPENROUTER_KEY) return 'openrouter';
   if (GEMINI_KEY)     return 'gemini';
   return 'mock';
@@ -56,6 +58,33 @@ function extractJSON(text: string): string {
   return text;
 }
 
+// ── DeepSeek (OpenAI-compatible) ─────────────────────────────────────────────
+async function askDeepSeek(prompt: string): Promise<string> {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${DEEPSEEK_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: '你是专业短视频内容策划。严格按照要求的 JSON 格式返回，不要包含任何 markdown 或额外说明，只输出纯 JSON。',
+        },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!res.ok) throw new Error(`DeepSeek ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('DeepSeek returned empty content');
+  return extractJSON(content);
+}
+
 // ── Gemini ────────────────────────────────────────────────────────────────────
 async function askGemini(prompt: string): Promise<string> {
   if (!GEMINI_KEY) throw new Error('NO_GEMINI_KEY');
@@ -71,6 +100,7 @@ async function askGemini(prompt: string): Promise<string> {
 
 // ── Unified ask() ─────────────────────────────────────────────────────────────
 async function ask(prompt: string): Promise<string> {
+  if (DEEPSEEK_KEY)   return askDeepSeek(prompt);
   if (OPENROUTER_KEY) return askOpenRouter(prompt);
   if (GEMINI_KEY)     return askGemini(prompt);
   throw new Error('NO_KEY');
