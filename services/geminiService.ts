@@ -1,22 +1,59 @@
 import { GoogleGenAI } from "@google/genai";
 import { Platform, TopicIdea, Script, ShootingGuide, PublishKit, ScriptLine } from "../types";
 
-function getClient() {
-  const key = process.env.API_KEY;
-  if (!key) return null;
-  return new GoogleGenAI({ apiKey: key });
+// ── Provider detection ────────────────────────────────────────────────────────
+// Priority: OpenRouter → Gemini → mock fallback
+const OPENROUTER_KEY  = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL= process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
+const GEMINI_KEY      = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
+
+export function activeProvider(): 'openrouter' | 'gemini' | 'mock' {
+  if (OPENROUTER_KEY) return 'openrouter';
+  if (GEMINI_KEY)     return 'gemini';
+  return 'mock';
 }
 
-async function ask(prompt: string): Promise<string> {
-  const ai = getClient();
-  if (!ai) throw new Error("NO_KEY");
-  const r = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: { responseMimeType: "application/json" },
+// ── OpenRouter (OpenAI-compatible) ────────────────────────────────────────────
+async function askOpenRouter(prompt: string): Promise<string> {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:3000',
+      'X-Title': '短视频助手',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    }),
   });
-  if (!r.text) throw new Error("EMPTY");
+  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OpenRouter returned empty content');
+  return content;
+}
+
+// ── Gemini ────────────────────────────────────────────────────────────────────
+async function askGemini(prompt: string): Promise<string> {
+  if (!GEMINI_KEY) throw new Error('NO_GEMINI_KEY');
+  const ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
+  const r = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: { responseMimeType: 'application/json' },
+  });
+  if (!r.text) throw new Error('Gemini returned empty');
   return r.text;
+}
+
+// ── Unified ask() ─────────────────────────────────────────────────────────────
+async function ask(prompt: string): Promise<string> {
+  if (OPENROUTER_KEY) return askOpenRouter(prompt);
+  if (GEMINI_KEY)     return askGemini(prompt);
+  throw new Error('NO_KEY');
 }
 
 // ── 1. 选题 ───────────────────────────────────────────────────────────────
