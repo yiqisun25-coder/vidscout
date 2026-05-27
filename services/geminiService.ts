@@ -97,15 +97,15 @@ async function ask(prompt: string, sys?: string): Promise<string> {
 }
 
 // ── 店铺信息摘要（供 prompt 复用）────────────────────────────────────────────
-function shopDesc(shop: ShopInfo): string {
+function shopDesc(shop: ShopInfo, brandVoice?: string): string {
   return `店名：${shop.name}
 类型：${shop.type}
 人均：${shop.avgPrice}
-特色/卖点：${shop.highlights}${shop.area ? `\n区域：${shop.area}` : ''}`;
+特色/卖点：${shop.highlights}${shop.area ? `\n区域：${shop.area}` : ''}${brandVoice ? `\n品牌调性：${brandVoice}` : ''}`;
 }
 
 // ── 1. 选题 ───────────────────────────────────────────────────────────────────
-export async function genTopics(shop: ShopInfo, platform: Platform): Promise<TopicIdea[]> {
+export async function genTopics(shop: ShopInfo, platform: Platform, brandVoice?: string): Promise<TopicIdea[]> {
   const platformHints: Record<Platform, string> = {
     '抖音本地生活': '竖屏15-60秒，钩子强，情绪驱动，带地址/团购引导',
     '小红书':      '种草笔记，真实感，标题含关键词，图文或短视频',
@@ -117,7 +117,7 @@ export async function genTopics(shop: ShopInfo, platform: Platform): Promise<Top
 
   const raw = await ask(`平台：${platform}（${platformHints[platform]}）
 
-${shopDesc(shop)}
+${shopDesc(shop, brandVoice)}
 
 为这家店想4个差异化的探店选题，每个角度不一样：测评型、种草型、探秘型、性价比型。
 
@@ -142,7 +142,7 @@ ${shopDesc(shop)}
 }
 
 // ── 3. 脚本 ───────────────────────────────────────────────────────────────────
-export async function genScript(topic: TopicIdea, shop: ShopInfo, platform: Platform, duration: string): Promise<Script> {
+export async function genScript(topic: TopicIdea, shop: ShopInfo, platform: Platform, duration: string, brandVoice?: string): Promise<Script> {
   const angleGuide: Record<string, string> = {
     '种草': '像朋友推荐，有情绪和氛围感，重点在"为什么我爱这家"，不要罗列信息',
     '测评': '有态度的真实测评，给具体分数/对比，说出优缺点，观众信任你的判断',
@@ -155,7 +155,7 @@ export async function genScript(topic: TopicIdea, shop: ShopInfo, platform: Plat
   const raw = await ask(`你是一个真实的探店博主，正在给${platform}拍一条${duration}的探店视频。${isTikTok ? '\n注意：TikTok 受众为海外用户，口播文案请用英文，画面说明可用中文。标题和字幕用英文。' : ''}
 
 店铺信息：
-${shopDesc(shop)}
+${shopDesc(shop, brandVoice)}
 
 这条视频的方向：
 标题：${topic.title}

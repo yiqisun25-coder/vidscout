@@ -63,6 +63,18 @@ export interface PublishKit {
   tips: string[];
 }
 
+// ── Client (客户档案) ─────────────────────────────────────────────────────────
+export interface Client {
+  id: string;
+  shopInfo: ShopInfo;
+  contact?: string;       // 联系人
+  phone?: string;         // 联系电话
+  brandVoice?: string;    // 品牌调性（如：轻松幽默、日式温馨、专业商务）供 AI 参考
+  notes?: string;         // 备注
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Script Format ─────────────────────────────────────────────────────────────
 export type ScriptFormat = 'explore' | 'cloud' | 'qa' | 'bts';
 
@@ -90,6 +102,8 @@ export interface Project {
   publishKit?: PublishKit;
   published?: boolean;
 
+  clientId?: string;
+  brandVoice?: string;   // 从客户档案继承，供 AI 使用
   createdAt: string;
   updatedAt: string;
 }

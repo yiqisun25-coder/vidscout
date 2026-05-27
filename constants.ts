@@ -35,4 +35,5 @@ export const STEP_META: { id: WorkflowStep; label: string; emoji: string; desc: 
   { id: 'publish',  label: '发布', emoji: '🚀', desc: '标题文案 + 本地标签'    },
 ];
 
-export const STORAGE_KEY = 'dianpu_projects_v1';
+export const STORAGE_KEY  = 'dianpu_projects_v1';
+export const CLIENTS_KEY  = 'dianpu_clients_v1';

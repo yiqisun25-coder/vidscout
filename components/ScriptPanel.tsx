@@ -51,7 +51,7 @@ export default function ScriptPanel({ project, onChange }: Props) {
     if (!project.topic) return;
     setLoading(true);
     try {
-      const script = await genScript(project.topic, project.shopInfo, project.platform, duration);
+      const script = await genScript(project.topic, project.shopInfo, project.platform, duration, project.brandVoice);
       onChange({ script, rawScript: undefined, status: 'scripting' });
     } catch {
       onChange({ script: mockScript(project.topic, project.shopInfo), rawScript: undefined, status: 'scripting' });

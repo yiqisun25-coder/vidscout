@@ -15,7 +15,7 @@ export default function TopicPanel({ project, onChange }: Props) {
     setErr('');
     setLoading(true);
     try {
-      const topics = await genTopics(shop, project.platform);
+      const topics = await genTopics(shop, project.platform, project.brandVoice);
       onChange({ topics, topic: undefined });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
