@@ -5,9 +5,10 @@ import { saveApiSettings, loadApiSettings, clearApiSettings, activeProvider, pro
 interface Props { onClose: () => void; }
 
 const PRESETS = [
-  { label: 'SiliconFlow', base: 'https://api.siliconflow.cn/v1', model: 'Qwen/Qwen2.5-7B-Instruct' },
-  { label: 'DeepSeek',    base: 'https://api.deepseek.com/v1',   model: 'deepseek-chat' },
-  { label: 'Moonshot',    base: 'https://api.moonshot.cn/v1',    model: 'moonshot-v1-8k' },
+  { label: 'SiliconFlow', base: 'https://api.siliconflow.cn/v1',    model: 'Qwen/Qwen2.5-7B-Instruct' },
+  { label: 'Groq ⚡',     base: 'https://api.groq.com/openai/v1',   model: 'llama-3.3-70b-versatile' },
+  { label: 'DeepSeek',    base: 'https://api.deepseek.com/v1',       model: 'deepseek-chat' },
+  { label: 'Moonshot',    base: 'https://api.moonshot.cn/v1',        model: 'moonshot-v1-8k' },
 ];
 
 export default function SettingsModal({ onClose }: Props) {
