@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY),
+        'process.env.SILICONFLOW_API_KEY': JSON.stringify(env.SILICONFLOW_API_KEY),
       },
       resolve: {
         alias: {

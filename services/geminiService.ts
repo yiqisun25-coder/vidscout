@@ -1,8 +1,8 @@
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const SF_API_URL = 'https://api.siliconflow.cn/v1/chat/completions';
+const SF_MODEL = 'deepseek-ai/DeepSeek-V3';
 
 const getApiKey = (): string | null => {
-  return process.env.GROQ_API_KEY || null;
+  return process.env.SILICONFLOW_API_KEY || null;
 };
 
 export const generateVideoScript = async (
@@ -11,17 +11,17 @@ export const generateVideoScript = async (
 ): Promise<string> => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY 未配置，请在 .env.local 中设置');
+    throw new Error('SILICONFLOW_API_KEY 未配置，请在 .env.local 中设置');
   }
 
-  const response = await fetch(GROQ_API_URL, {
+  const response = await fetch(SF_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: GROQ_MODEL,
+      model: SF_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -33,7 +33,7 @@ export const generateVideoScript = async (
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error((err as any)?.error?.message || `请求失败 (${response.status})`);
+    throw new Error(`api.siliconflow.cn ${response.status}: "${(err as any)?.message || '请求失败'}"`);
   }
 
   const data = await response.json();

@@ -14,13 +14,13 @@
    npm install
    ```
 
-2. 获取免费 Groq API Key：
-   - 注册：https://console.groq.com
-   - 创建 API Key（免费，无需信用卡）
+2. 获取硅基流动 API Key：
+   - 注册：https://cloud.siliconflow.cn
+   - 新用户有免费额度，无需信用卡
 
 3. 在项目根目录创建 `.env.local`：
    ```
-   GROQ_API_KEY=gsk_xxxxxxxxxx
+   SILICONFLOW_API_KEY=sk-xxxxxxxxxx
    ```
 
 4. 启动：
