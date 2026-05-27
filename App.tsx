@@ -7,7 +7,8 @@ import ScriptPanel   from './components/ScriptPanel';
 import ShootingPanel from './components/ShootingPanel';
 import PublishPanel  from './components/PublishPanel';
 import { activeProvider, providerLabel } from './services/geminiService';
-import { Plus, ArrowLeft, Video, Trash2, Calendar, ChevronRight, Store, Cpu } from 'lucide-react';
+import { Plus, ArrowLeft, Trash2, Calendar, ChevronRight, Store, Cpu, Settings } from 'lucide-react';
+import SettingsModal from './components/SettingsModal';
 
 const PROVIDER_CLS: Record<ReturnType<typeof activeProvider>, string> = {
   custom:     'text-emerald-300 bg-emerald-500/10 border-emerald-500/30',
@@ -42,6 +43,7 @@ export default function App() {
   const [newHighlight, setNewHighlight] = useState('');
   const [newArea,      setNewArea]      = useState('');
   const [newErr,       setNewErr]       = useState('');
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => { setProjects(load()); }, []);
 
@@ -85,6 +87,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       <div className="max-w-2xl mx-auto px-4 pt-8 pb-24">
 
         {/* Header */}
@@ -99,15 +102,21 @@ export default function App() {
                 <Store size={20} className="text-violet-400" />
                 <span className="font-bold text-slate-100 text-lg tracking-tight">{APP_NAME}</span>
               </div>
-              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border font-medium ${PROVIDER_CLS[activeProvider()]}`}>
+              <button onClick={() => setShowSettings(true)}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border font-medium transition-all hover:opacity-80 ${PROVIDER_CLS[activeProvider()]}`}>
                 <Cpu size={10} /> {providerLabel()}
-              </span>
+              </button>
             </div>
           )}
           {view === 'list' && (
-            <button onClick={() => setView('new')} className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition-all">
-              <Plus size={15} /> 新项目
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowSettings(true)} className="p-2 text-slate-500 hover:text-slate-300 transition-colors" title="API 设置">
+                <Settings size={16} />
+              </button>
+              <button onClick={() => setView('new')} className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition-all">
+                <Plus size={15} /> 新项目
+              </button>
+            </div>
           )}
           {view === 'editor' && active && (
             <button onClick={() => deleteProject(active.id)} className="p-2 text-slate-600 hover:text-red-400 transition-colors">

@@ -1,10 +1,29 @@
 import { GoogleGenAI } from "@google/genai";
 import { Platform, ShopInfo, TopicIdea, Script, ScriptLine, ShootingGuide, PublishKit } from "../types";
 
-// ── Provider ──────────────────────────────────────────────────────────────────
-const CUSTOM_BASE  = process.env.CUSTOM_API_BASE;
-const CUSTOM_KEY   = process.env.CUSTOM_API_KEY;
-const CUSTOM_MODEL = process.env.CUSTOM_API_MODEL ?? 'Qwen/Qwen2.5-72B-Instruct';
+// ── API Settings (localStorage takes priority over .env) ──────────────────────
+const ENV_BASE  = process.env.CUSTOM_API_BASE;
+const ENV_KEY   = process.env.CUSTOM_API_KEY;
+const ENV_MODEL = process.env.CUSTOM_API_MODEL ?? 'Qwen/Qwen2.5-72B-Instruct';
+
+function getStored(): { base?: string; key?: string; model?: string } {
+  try { return JSON.parse(localStorage.getItem('dianpu_api_settings') ?? '{}'); }
+  catch { return {}; }
+}
+
+export function saveApiSettings(base: string, key: string, model: string) {
+  localStorage.setItem('dianpu_api_settings', JSON.stringify({ base: base.trim(), key: key.trim(), model: model.trim() }));
+}
+export function loadApiSettings() {
+  const s = getStored();
+  return { base: s.base ?? ENV_BASE ?? '', key: s.key ?? '', model: s.model ?? ENV_MODEL };
+}
+export function clearApiSettings() { localStorage.removeItem('dianpu_api_settings'); }
+
+function cBase():  string | undefined { const s = getStored(); return s.base  || ENV_BASE;  }
+function cKey():   string | undefined { const s = getStored(); return s.key   || ENV_KEY;   }
+function cModel(): string             { const s = getStored(); return s.model || ENV_MODEL; }
+
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const OR_KEY       = process.env.OPENROUTER_API_KEY;
 const OR_MODEL     = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
@@ -13,17 +32,18 @@ const GEMINI_KEY   = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
 export type ProviderName = 'custom' | 'deepseek' | 'openrouter' | 'gemini' | 'mock';
 
 export function activeProvider(): ProviderName {
-  if (CUSTOM_BASE && CUSTOM_KEY) return 'custom';
-  if (DEEPSEEK_KEY)              return 'deepseek';
-  if (OR_KEY)                    return 'openrouter';
-  if (GEMINI_KEY)                return 'gemini';
+  if (cBase() && cKey()) return 'custom';
+  if (DEEPSEEK_KEY)       return 'deepseek';
+  if (OR_KEY)             return 'openrouter';
+  if (GEMINI_KEY)         return 'gemini';
   return 'mock';
 }
 
 export function providerLabel(): string {
-  if (CUSTOM_BASE && CUSTOM_KEY) {
+  const base = cBase(), key = cKey();
+  if (base && key) {
     try {
-      const host = new URL(CUSTOM_BASE).hostname;
+      const host = new URL(base).hostname;
       const parts = host.split('.');
       const name = parts.length >= 2 ? parts[parts.length - 2] : host;
       return name.charAt(0).toUpperCase() + name.slice(1);
@@ -38,18 +58,18 @@ export function providerLabel(): string {
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 const SYS = '你是专业探店短视频策划。严格按要求返回纯 JSON，不含任何 markdown 或额外文字。';
 
-async function askOpenAICompat(base: string, key: string, model: string, prompt: string, extraHeaders: Record<string,string> = {}): Promise<string> {
+async function askOpenAICompat(base: string, key: string, model: string, prompt: string, extraHeaders: Record<string,string> = {}, sys = SYS): Promise<string> {
   const url = base.replace(/\/$/, '') + '/chat/completions';
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', ...extraHeaders },
-    body: JSON.stringify({ model, messages: [{ role: 'system', content: SYS }, { role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`${new URL(url).hostname} ${res.status}: ${await res.text()}`);
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('API returned empty content');
-  return extractJSON(content);
+  return content;
 }
 
 async function askGemini(prompt: string): Promise<string> {
@@ -67,11 +87,12 @@ function extractJSON(text: string): string {
   return start !== -1 ? text.slice(start) : text;
 }
 
-async function ask(prompt: string): Promise<string> {
-  if (CUSTOM_BASE && CUSTOM_KEY) return askOpenAICompat(CUSTOM_BASE, CUSTOM_KEY, CUSTOM_MODEL, prompt);
-  if (DEEPSEEK_KEY)              return askOpenAICompat('https://api.deepseek.com/v1', DEEPSEEK_KEY, 'deepseek-chat', prompt);
-  if (OR_KEY)                    return askOpenAICompat('https://openrouter.ai/api/v1', OR_KEY, OR_MODEL, prompt, { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'Shop Explorer' });
-  if (GEMINI_KEY)                return askGemini(prompt);
+async function ask(prompt: string, sys?: string): Promise<string> {
+  const base = cBase(), key = cKey(), model = cModel();
+  if (base && key) return askOpenAICompat(base, key, model, prompt, {}, sys ?? SYS);
+  if (DEEPSEEK_KEY) return askOpenAICompat('https://api.deepseek.com/v1', DEEPSEEK_KEY, 'deepseek-chat', prompt, {}, sys ?? SYS);
+  if (OR_KEY)       return askOpenAICompat('https://openrouter.ai/api/v1', OR_KEY, OR_MODEL, prompt, { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'Shop Explorer' }, sys ?? SYS);
+  if (GEMINI_KEY)   return askGemini(prompt);
   throw new Error('NO_KEY');
 }
 
@@ -116,7 +137,7 @@ ${shopDesc(shop)}
   }
 ]`);
 
-  return JSON.parse(raw) as TopicIdea[];
+  return JSON.parse(extractJSON(raw)) as TopicIdea[];
 }
 
 // ── 3. 脚本 ───────────────────────────────────────────────────────────────────
@@ -167,7 +188,7 @@ ${shopDesc(shop)}
 type只能用：hook / arrival / environment / product / price / verdict / cta
 共7-9条，时间戳连续不断层。不要所有段落语气一样，要有起伏。`);
 
-  return JSON.parse(raw) as Script;
+  return JSON.parse(extractJSON(raw)) as Script;
 }
 
 // ── 4. 拍摄指南 ───────────────────────────────────────────────────────────────
@@ -199,7 +220,7 @@ ${visualSummary}
 
 gear 4-5条，shots 5-7条（覆盖门头/环境/产品/价格牌/结账等），lighting 3条，editing 4条。`);
 
-  return JSON.parse(raw) as ShootingGuide;
+  return JSON.parse(extractJSON(raw)) as ShootingGuide;
 }
 
 // ── 5. 发布配置 ───────────────────────────────────────────────────────────────
@@ -232,7 +253,7 @@ ${shopDesc(shop)}
 
 hashtags 要包含：店名、品类、区域探店、${platform}相关话题的组合。`);
 
-  return JSON.parse(raw) as PublishKit;
+  return JSON.parse(extractJSON(raw)) as PublishKit;
 }
 
 // ── Mock fallbacks ────────────────────────────────────────────────────────────
@@ -306,4 +327,103 @@ export function mockPublishKit(topic: TopicIdea, shop: ShopInfo, platform: Platf
       `${platform}本地探店内容优先推给3公里内用户，发布时间选饭点前1小时效果最好`,
     ],
   };
+}
+
+// ── 品牌内容脚本（云剪/痛点问答/幕后制作）────────────────────────────────────
+const FORMAT_SYS: Record<string, string> = {
+  cloud: `你是抖音本地生活推广专家。写"云剪型"短视频脚本，供达人套模板使用。
+总时长30-45秒。结构：【开头3秒钩子】→【产品/服务展示10-15秒】→【核心卖点10秒】→【行动引导5秒】
+每段格式：画面描述 | 字幕文案 | 时长
+语气干净利落，无废话，字幕直接说结论。不要有剧情，纯功能性内容。
+输出纯文本，不要markdown加粗，用换行分段。`,
+
+  qa: `你是抖音本地生活推广专家。写"痛点问答型"短视频脚本，承接搜索流量。
+总时长20-35秒。结构：【提问字幕3秒】→【痛点共鸣5秒】→【直接回答+数据10-15秒】→【佐证画面5秒】→【CTA 3秒】
+每段格式：画面描述 | 字幕文案 | 时长
+开头必须是用户会主动搜索的问题直接出字幕，回答要有具体数字或对比，不出镜也可以字幕驱动。
+输出纯文本，不要markdown加粗，用换行分段。`,
+
+  bts: `你是抖音本地生活推广专家。写"幕后制作型"短视频脚本，用过程建立品牌信任。
+总时长40-60秒。结构：【制作流程分镜每步5-10秒】→【工艺细节特写10秒】→【成品展示5秒】→【结尾引导5秒】
+每段格式：镜头描述 | 字幕/旁白文案 | 时长 | 音效建议
+镜头描述要具体（景别/角度/运动方式），字幕不超过12字/条，整体像工业纪录片节奏。
+输出纯文本，不要markdown加粗，用换行分段。`,
+};
+
+export const FORMAT_FIELDS: Record<'cloud'|'qa'|'bts', { key: string; label: string; placeholder: string; multiline?: boolean }[]> = {
+  cloud: [
+    { key: 'product', label: '产品/服务名称', placeholder: '例：定制T恤 / 热转印马克杯 / 企业工装' },
+    { key: 'hook',    label: '视觉钩子（开头3秒的画面）', placeholder: '例：成品特写、机器运转画面、包装拆箱' },
+    { key: 'process', label: '核心服务流程（2-3步）', placeholder: '例：上传图片→选材料→出成品', multiline: true },
+    { key: 'cta',     label: '行动引导', placeholder: '例：主页领50件优惠券 / 评论区问价' },
+  ],
+  qa: [
+    { key: 'product',  label: '产品/服务名称', placeholder: '例：定制T恤 / 企业周边' },
+    { key: 'question', label: '用户最常问的问题', placeholder: '例：100件和50件的印刷成本差多少？' },
+    { key: 'pain',     label: '背后的真实顾虑', placeholder: '例：怕起订量太高浪费，怕品质不稳定' },
+    { key: 'answer',   label: '你的回答角度/优势', placeholder: '例：我们50件起印，单件含设计费也比同行低20%' },
+    { key: 'proof',    label: '佐证画面', placeholder: '例：报价单截图、客户返单记录、成品对比' },
+  ],
+  bts: [
+    { key: 'product', label: '产品/服务名称', placeholder: '例：丝网印刷T恤' },
+    { key: 'steps',   label: '制作关键步骤（3-5步）', placeholder: '例：制版→调色→上机→烘干→质检→包装', multiline: true },
+    { key: 'detail',  label: '最值得拍的细节/工艺亮点', placeholder: '例：色彩层叠特写、裁切精度、成品手感' },
+    { key: 'voice',   label: '旁白风格', placeholder: '例：简洁字幕无旁白 / 工厂环境音 / 员工说工艺' },
+    { key: 'ending',  label: '结尾引导', placeholder: '例：展示客户收货反应 / 直接报价区间' },
+  ],
+};
+
+export async function genFormatScript(format: 'cloud'|'qa'|'bts', inputs: Record<string, string>, shop: ShopInfo): Promise<string> {
+  const fields = FORMAT_FIELDS[format];
+  const inputText = fields.map(f => `${f.label}：${inputs[f.key] || '（未填写）'}`).join('\n');
+  const prompt = `商家信息：\n${shopDesc(shop)}\n\n内容信息：\n${inputText}\n\n请生成完整可用的短视频脚本。`;
+  try {
+    return await ask(prompt, FORMAT_SYS[format]);
+  } catch {
+    return mockFormatScript(format, inputs, shop);
+  }
+}
+
+function mockFormatScript(format: 'cloud'|'qa'|'bts', inputs: Record<string, string>, shop: ShopInfo): string {
+  if (format === 'cloud') return `【开头3秒钩子】
+画面：${inputs.hook || shop.name + '产品特写，高饱和色彩'} | 字幕：3秒做好这件事，你的品牌就出圈了 | 3s
+
+【产品/服务展示 10-15秒】
+画面：${inputs.product || '产品'}制作全程实拍 | 字幕：${shop.name}·专业定制 | 12s
+
+【核心卖点 10秒】
+画面：成品效果对比展示 | 字幕：${inputs.process || '快速出货，品质稳定'} | 10s
+
+【行动引导 5秒】
+画面：联系方式+样品展示 | 字幕：${inputs.cta || '评论区留言，今天下单明天出货'} | 5s`;
+
+  if (format === 'qa') return `【提问字幕开场 3秒】
+画面：黑底白字全屏字幕 | 字幕：${inputs.question || '定制印刷最少要多少件？'} | 3s
+
+【痛点共鸣 5秒】
+画面：产品实拍 | 字幕：很多人都怕${inputs.pain || '起订量太高，浪费预算'} | 5s
+
+【直接回答 10-15秒】
+画面：报价单/样品展示 | 字幕：${inputs.answer || '我们50件起印，性价比比同行高20%'} | 12s
+
+【佐证画面 5秒】
+画面：${inputs.proof || '客户返单记录/好评截图'} | 字幕：已服务500+企业客户 | 5s
+
+【CTA 3秒】
+画面：二维码/联系方式 | 字幕：评论区问价，当天报价 | 3s`;
+
+  return `【制作流程 步骤1】
+镜头：机器运转特写，稳定器平移 | 字幕：${(inputs.steps || '制版→印刷→质检').split('→')[0] || '制版'} | 8s | 机器运转环境音
+
+【制作流程 步骤2】
+镜头：工艺细节俯拍45° | 字幕：精度控制 | 8s | 环境音渐强
+
+【工艺细节特写】
+镜头：${inputs.detail || '色彩层叠特写'} 微距拍摄 | 字幕：每一件都经过质检 | 10s | 舒缓背景音乐
+
+【成品展示】
+镜头：成品平铺+手持展示 | 字幕：${shop.name}·品质看得见 | 5s | 音乐高潮
+
+【结尾引导】
+镜头：联系方式卡片 | 字幕：${inputs.ending || '评论区问价，快速出货'} | 5s | 音乐淡出`;
 }

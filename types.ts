@@ -63,6 +63,9 @@ export interface PublishKit {
   tips: string[];
 }
 
+// ── Script Format ─────────────────────────────────────────────────────────────
+export type ScriptFormat = 'explore' | 'cloud' | 'qa' | 'bts';
+
 // ── Project ───────────────────────────────────────────────────────────────────
 export interface Project {
   id: string;
@@ -78,6 +81,9 @@ export interface Project {
   topics?: TopicIdea[];
   topic?: TopicIdea;
   script?: Script;
+  scriptFormat?: ScriptFormat;
+  rawScript?: string;            // plain-text output for cloud/qa/bts formats
+  formatInputs?: Record<string, string>; // saved inputs for non-explore formats
   shootingGuide?: ShootingGuide;
   checkedGear?: string[];
   checkedShots?: number[];
