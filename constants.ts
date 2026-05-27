@@ -34,7 +34,7 @@ export const FORMATS: ScriptFormat[] = [
     id: "bts",
     label: "⑤ 幕后制作型",
     tag: "过程即内容 → 品牌信任",
-    desc: "展示"东西是怎么做出来的"，全程实拍生产流程，无需剧情。印刷/定制品视觉天然适合。",
+    desc: '展示「东西是怎么做出来的」，全程实拍生产流程，无需剧情。印刷/定制品视觉天然适合。',
     color: "#10b981",
     fields: [
       { key: "product", label: "产品/服务名称", placeholder: "e.g. 丝网印刷T恤" },
