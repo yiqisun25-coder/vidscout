@@ -1,20 +1,56 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 探店助手
 
-# Run and deploy your AI Studio app
+本地餐饮/商铺短视频运营助手，帮你管理客户档案、策划选题、生成脚本、追踪拍摄和发布进度。
 
-This contains everything you need to run your app locally.
+**在线访问：** `https://yiqisun25-coder.github.io/be-a-/`
 
-View your app in AI Studio: https://ai.studio/apps/drive/146w0sd3xbichSE4pU9EI7wfE18ccz9MF
+---
 
-## Run Locally
+## 功能
 
-**Prerequisites:**  Node.js
+### 客户档案
+- 为每个合作商户建立档案（店名、类型、人均、特色、区域）
+- 填写「品牌调性」后，AI 生成的选题和脚本会自动贴合该店风格
+- 支持联系人、备注等信息
 
+### 五步工作流
+每个视频项目走完完整流程：
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+| 步骤 | 说明 |
+|------|------|
+| 🎯 选题 | AI 根据店铺信息和平台生成 6 个差异化选题角度 |
+| 📅 排期 | 设置发布平台、计划日期、视频时长、状态 |
+| 📝 脚本 | 4 种脚本格式（探店测评 / 云剪型 / 痛点问答 / 幕后制作） |
+| 🎬 拍摄 | 分镜清单、拍摄 checklist、注意事项 |
+| 🚀 发布 | 生成标题、话题标签、发布文案 |
+
+### 多平台支持
+抖音本地生活 · 小红书 · 大众点评 · 视频号 · 快手 · TikTok（自动切换英文）
+
+### API 配置（应用内设置，无需改代码）
+点右上角齿轮图标配置，支持一键切换：
+- **SiliconFlow** — 国内稳定，Qwen 系列
+- **Groq ⚡** — 免费额度快速响应
+- **OpenRouter** — 接入 Gemini / GPT 等
+- **DeepSeek** — 国内中文效果好
+- **Moonshot** — Kimi 模型
+
+API Key 仅保存在本地浏览器（localStorage），不上传任何服务器。
+
+---
+
+## 本地运行
+
+```bash
+npm install
+npm run dev
+# 打开 http://localhost:3000
+```
+
+或在应用内直接配置 API Key，无需创建 `.env` 文件。
+
+---
+
+## 部署
+
+推送到 `claude/short-video-assistant-lUyeU` 分支后，GitHub Actions 自动构建并部署到 GitHub Pages。
