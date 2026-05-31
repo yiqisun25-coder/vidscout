@@ -2,7 +2,7 @@
 
 本地餐饮/商铺短视频运营助手，帮你管理客户档案、策划选题、生成脚本、追踪拍摄和发布进度。
 
-**在线访问：** `https://yiqisun25-coder.github.io/be-a-/`
+**在线访问：** `https://yiqisun25-coder.github.io/vidscout/`
 
 ---
 
