@@ -7,6 +7,7 @@ interface Props { onClose: () => void; }
 const PRESETS = [
   { label: 'SiliconFlow', base: 'https://api.siliconflow.cn/v1',    model: 'Qwen/Qwen2.5-7B-Instruct' },
   { label: 'Groq ⚡',     base: 'https://api.groq.com/openai/v1',   model: 'llama-3.3-70b-versatile' },
+  { label: 'OpenAI',      base: 'https://api.openai.com/v1',         model: 'gpt-4o-mini' },
   { label: 'OpenRouter',  base: 'https://openrouter.ai/api/v1',     model: 'google/gemini-2.0-flash-001' },
   { label: 'DeepSeek',    base: 'https://api.deepseek.com/v1',       model: 'deepseek-chat' },
   { label: 'Moonshot',    base: 'https://api.moonshot.cn/v1',        model: 'moonshot-v1-8k' },
@@ -117,7 +118,7 @@ export default function SettingsModal({ onClose }: Props) {
               className={`w-full bg-slate-800 border rounded-xl px-3 py-2.5 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors font-mono ${
                 matchedPreset && model !== matchedPreset.model ? 'border-amber-600/60' : 'border-slate-700'
               }`}
-              placeholder="Qwen/Qwen2.5-7B-Instruct"
+              placeholder="gpt-4o-mini"
               value={model} onChange={e => setModel(e.target.value)} />
             {matchedPreset && model !== matchedPreset.model && (
               <p className="text-xs text-amber-500 mt-1">
